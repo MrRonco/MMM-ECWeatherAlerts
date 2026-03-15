@@ -119,18 +119,21 @@ Module.register("MMM-ECWeatherAlerts", {
     eventEl.textContent = names.join("  |  ");
     details.appendChild(eventEl);
 
-    // Description from the top alert's "What:" section
-    var descText = topAlert.what || topAlert.description.split("\n").slice(0, 2).map(function (l) {
-      return l.trim();
-    }).filter(Boolean).join(" ");
-    if (descText) {
-      var desc = document.createElement("div");
-      desc.className = "ec-alert-description";
-      desc.textContent = descText;
-      details.appendChild(desc);
-    }
+    // Description for each alert
+    var self = this;
+    alerts.forEach(function (alert) {
+      var descText = alert.what || alert.description.split("\n").slice(0, 2).map(function (l) {
+        return l.trim();
+      }).filter(Boolean).join(" ");
+      if (descText) {
+        var desc = document.createElement("div");
+        desc.className = "ec-alert-description";
+        desc.textContent = descText;
+        details.appendChild(desc);
+      }
+    });
 
-    // Meta line: tier badges + time range
+    // Meta line: tier badges + time range for each alert
     var meta = document.createElement("div");
     meta.className = "ec-alert-meta";
 
@@ -141,13 +144,19 @@ Module.register("MMM-ECWeatherAlerts", {
       meta.appendChild(badge);
     });
 
-    // Time range
-    if (topAlert.onset || topAlert.expires) {
+    // Time range from earliest onset to latest expiry
+    var earliest = alerts.reduce(function (min, a) {
+      return a.onset && (!min || a.onset < min) ? a.onset : min;
+    }, null);
+    var latest = alerts.reduce(function (max, a) {
+      return a.expires && (!max || a.expires > max) ? a.expires : max;
+    }, null);
+    if (earliest || latest) {
       var time = document.createElement("span");
       time.className = "ec-alert-time";
       var parts = [];
-      if (topAlert.onset) parts.push(this.formatTime(topAlert.onset));
-      if (topAlert.expires) parts.push(this.formatTime(topAlert.expires));
+      if (earliest) parts.push(self.formatTime(earliest));
+      if (latest) parts.push(self.formatTime(latest));
       time.textContent = parts.join(" – ");
       meta.appendChild(time);
     }
@@ -178,6 +187,7 @@ Module.register("MMM-ECWeatherAlerts", {
       }
 
       this.updateDom(this.config.animationSpeed);
+      this.updateAlertHeight();
 
     } else if (notification === "EC_ALERTS_ERROR") {
       Log.error("[MMM-ECWeatherAlerts] Error: " + payload);
@@ -187,16 +197,41 @@ Module.register("MMM-ECWeatherAlerts", {
         this.alertsActive = false;
         this.hide(300);
       }
+      this.updateAlertHeight();
     }
   },
 
   notificationReceived: function (notification) {
     if (notification === "ALL_MODULES_STARTED" && !this.alertsActive) {
       this.hide(0);
+      this.updateAlertHeight();
     }
   },
 
   /* ── Helpers ───────────────────────────────────────────────── */
+
+  /**
+   * Measure the rendered alert bar height and publish it as a CSS
+   * custom property so other zones can position below it dynamically.
+   * Sets --alert-bar-height on :root (0px when no alerts visible).
+   */
+  updateAlertHeight: function () {
+    var self = this;
+    // Wait for DOM to render + show() animation to complete
+    setTimeout(function () {
+      var height = 0;
+      var el = document.querySelector(".MMM-ECWeatherAlerts:not(.hidden) .ec-alerts-bar");
+      if (el && el.getBoundingClientRect().height > 0) {
+        height = el.getBoundingClientRect().height;
+      }
+      var gap = height > 0 ? 20 : 0;
+      document.documentElement.style.setProperty(
+        "--alert-bar-height",
+        Math.ceil(height + gap) + "px"
+      );
+      Log.info("[MMM-ECWeatherAlerts] Alert bar height: " + Math.ceil(height) + "px, var set to: " + Math.ceil(height + gap) + "px");
+    }, 1500); // 1.5s — enough for show(300) animation + updateDom(1000)
+  },
 
   requestAlerts: function () {
     this.sendSocketNotification("FETCH_EC_ALERTS", {

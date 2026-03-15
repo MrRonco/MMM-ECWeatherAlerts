@@ -18,13 +18,9 @@ Displays active weather warnings, watches, advisories, and statements from Envir
 
 ## Screenshot
 
-When a weather warning is active:
+When weather warnings are active:
 
-```
-⚠ Winter Storm Warning
-Total snowfall and ice pellet accumulations of 10 to 20 cm...
-[WARNING]                          Mar 15, 10:00 AM – 1:46 PM
-```
+![MMM-ECWeatherAlerts showing a Winter Storm and Rainfall warning](screenshots/ec-weather-alerts.png)
 
 ## Installation
 
