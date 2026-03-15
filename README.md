@@ -37,28 +37,51 @@ No `npm install` needed — this module has no dependencies.
 
 ## Configuration
 
-Add to your `config/config.js`:
+Add the following block to the `modules` array in your `config/config.js`. A complete sample configuration file is also available at [`config.sample.js`](config.sample.js).
+
+### Minimal (recommended)
 
 ```js
 {
   module: "MMM-ECWeatherAlerts",
   position: "top_bar",
   config: {
-    area: "Sudbury",        // Your EC forecast area name
-    office: "CWTO"          // EC issuing office code
+    area: "Toronto",       // Your EC forecast area name
+    office: "CWTO"         // Your EC issuing office code
   }
-}
+},
+```
+
+### Full (all options)
+
+```js
+{
+  module: "MMM-ECWeatherAlerts",
+  position: "top_bar",
+  config: {
+    area: "Toronto",           // REQUIRED: EC forecast area
+    office: "CWTO",            // REQUIRED: EC issuing office code
+    updateInterval: 300000,    // Check every 5 minutes (default)
+    maxAlerts: 3,              // Max simultaneous alerts (default)
+    alertTypes: [              // Which CAP file types to fetch:
+      "warning",               //   T_WW — warnings
+      "watch"                  //   T_WO — watches & advisories
+      // "statement"            //   T_WS — uncomment to include
+    ],
+    animationSpeed: 1000       // DOM fade speed in ms (default)
+  }
+},
 ```
 
 ### Configuration Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `area` | `""` | **Required.** Your EC forecast area name (e.g. `"Sudbury"`, `"Toronto"`, `"Vancouver"`) |
+| `area` | `""` | **Required.** Your EC forecast area name (e.g. `"Toronto"`, `"Vancouver"`, `"Calgary"`) |
 | `office` | `"CWTO"` | **Required.** EC issuing office code (see table below) |
 | `updateInterval` | `300000` | How often to check for new alerts, in milliseconds (default: 5 minutes) |
 | `maxAlerts` | `3` | Maximum number of alerts to display simultaneously |
-| `alertTypes` | `["warning", "watch", "statement"]` | Which alert tiers to fetch. Remove types you don't want. |
+| `alertTypes` | `["warning", "watch"]` | Which alert types to fetch. Add `"statement"` for informational alerts. |
 | `animationSpeed` | `1000` | DOM update animation speed in milliseconds |
 
 ### Finding Your Area and Office
@@ -75,32 +98,44 @@ Add to your `config/config.js`:
 | `CWVR` | Pacific & Yukon | Vancouver Weather Centre |
 | `CWHX` | Atlantic | Halifax Weather Centre |
 
-### Examples
+### Regional Examples
 
-**Ontario — show only warnings:**
+**Ontario — warnings only:**
 ```js
-config: {
-  area: "Toronto",
-  office: "CWTO",
-  alertTypes: ["warning"]
-}
+{
+  module: "MMM-ECWeatherAlerts",
+  position: "top_bar",
+  config: {
+    area: "Toronto",
+    office: "CWTO",
+    alertTypes: ["warning"]
+  }
+},
 ```
 
 **British Columbia — all alert types:**
 ```js
-config: {
-  area: "Vancouver",
-  office: "CWVR"
-}
+{
+  module: "MMM-ECWeatherAlerts",
+  position: "top_bar",
+  config: {
+    area: "Vancouver",
+    office: "CWVR",
+    alertTypes: ["warning", "watch", "statement"]
+  }
+},
 ```
 
-**Alberta — warnings and watches only:**
+**Alberta — warnings and watches:**
 ```js
-config: {
-  area: "Calgary",
-  office: "CWNT",
-  alertTypes: ["warning", "watch"]
-}
+{
+  module: "MMM-ECWeatherAlerts",
+  position: "top_bar",
+  config: {
+    area: "Calgary",
+    office: "CWNT"
+  }
+},
 ```
 
 ## Styling
@@ -108,7 +143,7 @@ config: {
 The module uses CSS classes prefixed with `ec-` for easy customization:
 
 - `.ec-alerts-bar` — Main container
-- `.ec-color-red` / `.ec-color-yellow` / `.ec-color-grey` — Tier colours
+- `.ec-color-red` / `.ec-color-orange` / `.ec-color-yellow` — Tier colours
 - `.ec-alert-icon` — Warning triangle icon
 - `.ec-alert-event` — Alert title(s)
 - `.ec-alert-description` — Description text
@@ -142,5 +177,7 @@ MIT
 ## Credits
 
 - Weather data: [Environment and Climate Change Canada](https://weather.gc.ca)
+- EC colour-coded alerts: [Colour-coded alerts info](https://www.canada.ca/en/services/environment/weather/severeweather/weather-alerts/colour-coded-alerts.html)
 - CAP format: [OASIS Common Alerting Protocol](http://docs.oasis-open.org/emergency/cap/v1.2/CAP-v1.2.html)
 - Built for the [MagicMirror²](https://magicmirror.builders/) platform
+- Developed with the assistance of [Claude Code](https://claude.ai/claude-code) by Anthropic
