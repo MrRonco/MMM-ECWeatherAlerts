@@ -57,7 +57,9 @@ Module.register("MMM-ECWeatherAlerts", {
       "warning",            //   T_WW files — warnings
       "watch"               //   T_WO files — watches & advisories
     ],                      //   Add "statement" for T_WS (informational)
-    animationSpeed: 1000    // DOM update fade speed (ms)
+    animationSpeed: 1000,   // DOM update fade speed (ms)
+    backgroundOpacity: 0.25,// Background opacity of the alert bar (0–1)
+    textDimming: 0.8        // Opacity for description text (0–1), time is 75% of this
   },
 
   /* ── Module Lifecycle ──────────────────────────────────────── */
@@ -86,6 +88,11 @@ Module.register("MMM-ECWeatherAlerts", {
       wrapper.style.display = "none";
       return wrapper;
     }
+
+    // Apply configurable opacity via CSS custom properties
+    wrapper.style.setProperty("--ec-bg-opacity", this.config.backgroundOpacity);
+    wrapper.style.setProperty("--ec-text-dimming", this.config.textDimming);
+    wrapper.style.setProperty("--ec-time-dimming", Math.round(this.config.textDimming * 0.75 * 100) / 100);
 
     // Apply colour class from the highest-tier alert
     var topAlert = this.alerts[0];

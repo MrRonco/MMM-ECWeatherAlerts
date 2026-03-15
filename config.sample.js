@@ -35,7 +35,9 @@
       "watch"                  //   T_WO — watches & advisories
       // "statement"            //   T_WS — informational (uncomment to include)
     ],
-    animationSpeed: 1000       // DOM update fade speed in ms (default)
+    animationSpeed: 1000,      // DOM update fade speed in ms (default)
+    backgroundOpacity: 0.25,   // Alert bar background opacity, 0–1 (default)
+    textDimming: 0.8           // Description text opacity, 0–1 (default); time is 75% of this
   }
 },
 */

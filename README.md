@@ -64,7 +64,9 @@ Add the following block to the `modules` array in your `config/config.js`. A com
       "watch"                  //   T_WO — watches & advisories
       // "statement"            //   T_WS — uncomment to include
     ],
-    animationSpeed: 1000       // DOM fade speed in ms (default)
+    animationSpeed: 1000,      // DOM fade speed in ms (default)
+    backgroundOpacity: 0.25,   // Alert bar background opacity (0–1)
+    textDimming: 0.8           // Description text opacity (0–1)
   }
 },
 ```
@@ -79,6 +81,8 @@ Add the following block to the `modules` array in your `config/config.js`. A com
 | `maxAlerts` | `3` | Maximum number of alerts to display simultaneously |
 | `alertTypes` | `["warning", "watch"]` | Which alert types to fetch. Add `"statement"` for informational alerts. |
 | `animationSpeed` | `1000` | DOM update animation speed in milliseconds |
+| `backgroundOpacity` | `0.25` | Background opacity of the alert bar (`0`–`1`). Increase for a more prominent bar, decrease for subtlety. |
+| `textDimming` | `0.8` | Opacity for description text (`0`–`1`). Time display is automatically set to 75% of this value. Set to `1` for full brightness. |
 
 ### Finding Your Area and Office
 

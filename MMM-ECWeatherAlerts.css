@@ -26,19 +26,19 @@
 
 /* Red — Warnings */
 .ec-alerts-bar.ec-color-red {
-  background: rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, var(--ec-bg-opacity, 0.25));
   box-shadow: 0 2px 10px rgba(239, 68, 68, 0.3);
 }
 
 /* Yellow — Watches & Advisories */
 .ec-alerts-bar.ec-color-yellow {
-  background: rgba(245, 158, 11, 0.25);
+  background: rgba(245, 158, 11, var(--ec-bg-opacity, 0.25));
   box-shadow: 0 2px 10px rgba(245, 158, 11, 0.3);
 }
 
 /* Orange — Severe */
 .ec-alerts-bar.ec-color-orange {
-  background: rgba(249, 115, 22, 0.25);
+  background: rgba(249, 115, 22, var(--ec-bg-opacity, 0.25));
   box-shadow: 0 2px 10px rgba(249, 115, 22, 0.3);
 }
 
@@ -103,7 +103,7 @@
 
 .ec-alert-description {
   font-size: 0.9rem;
-  opacity: 0.8;
+  opacity: var(--ec-text-dimming, 0.8);
   margin-top: 5px;
   line-height: 1.35;
 }
@@ -144,7 +144,7 @@
 
 .ec-alert-time {
   font-size: 0.8rem;
-  opacity: 0.6;
+  opacity: var(--ec-time-dimming, 0.6);
   white-space: nowrap;
   margin-left: auto;
 }
