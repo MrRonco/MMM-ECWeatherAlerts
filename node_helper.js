@@ -144,6 +144,7 @@ module.exports = NodeHelper.create({
   /**
    * Download each CAP file, parse it, and filter for our area.
    * Deduplicates by event type, keeping the most recent.
+   * Filters out expired and ended alerts.
    */
   fetchAndFilterCAPs: function (capUrls, area, callback) {
     var self = this;
@@ -170,7 +171,9 @@ module.exports = NodeHelper.create({
         fetched++;
         if (!err && xml && xml.toLowerCase().includes(area.toLowerCase())) {
           var parsed = self.parseCAP(xml, area);
-          if (parsed) entries.push(parsed);
+          if (parsed && self.isAlertActive(parsed, xml)) {
+            entries.push(parsed);
+          }
         }
         if (fetched === uniqueUrls.length) {
           // Deduplicate by event type — keep most recent
@@ -194,6 +197,52 @@ module.exports = NodeHelper.create({
         }
       });
     });
+  },
+
+  /**
+   * Check whether a parsed CAP alert is still active.
+   * Filters out:
+   *   - AllClear / Cancel responseTypes (EC sends these when alerts end)
+   *   - Alerts with urgency "Past"
+   *   - Alerts whose <expires> timestamp is in the past
+   *   - Alerts whose headline contains "ended"
+   *   - Alerts with Alert_Location_Status "ended"
+   */
+  isAlertActive: function (parsed, xml) {
+    // Check responseType — AllClear and Cancel mean the alert is over
+    var responseMatch = xml.match(/<responseType>([^<]+)<\/responseType>/);
+    if (responseMatch) {
+      var responseType = responseMatch[1].trim();
+      if (responseType === "AllClear" || responseType === "Cancel") {
+        return false;
+      }
+    }
+
+    // Check urgency — "Past" means the event has ended
+    if (parsed.urgency && parsed.urgency.toLowerCase() === "past") {
+      return false;
+    }
+
+    // Check expires timestamp
+    if (parsed.expires) {
+      var expiresDate = new Date(parsed.expires);
+      if (!isNaN(expiresDate.getTime()) && expiresDate < new Date()) {
+        return false;
+      }
+    }
+
+    // Check headline for "ended"
+    if (parsed.headline && parsed.headline.toLowerCase().includes("ended")) {
+      return false;
+    }
+
+    // Check EC-specific Alert_Location_Status parameter
+    var statusMatch = xml.match(/<valueName>layer:EC-MSC-SMC:1\.0:Alert_Location_Status<\/valueName>\s*<value>([^<]+)<\/value>/);
+    if (statusMatch && statusMatch[1].trim().toLowerCase() === "ended") {
+      return false;
+    }
+
+    return true;
   },
 
   /**
