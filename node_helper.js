@@ -171,12 +171,17 @@ module.exports = NodeHelper.create({
         fetched++;
         if (!err && xml && xml.toLowerCase().includes(area.toLowerCase())) {
           var parsed = self.parseCAP(xml, area);
-          if (parsed && self.isAlertActive(parsed, xml)) {
+          if (parsed) {
             entries.push(parsed);
           }
         }
         if (fetched === uniqueUrls.length) {
-          // Deduplicate by event type — keep most recent
+          // Deduplicate by event type — keep most recent.
+          // This MUST happen before the active check, because EC publishes
+          // multiple CAP files for the same event across hours. An earlier
+          // file may show "in effect" for our area while the latest shows
+          // "ended". If we filter first, we'd drop the ended one and keep
+          // the stale active one.
           var byEvent = {};
           entries.forEach(function (e) {
             var key = e.event.toLowerCase();
@@ -185,7 +190,10 @@ module.exports = NodeHelper.create({
             }
           });
 
-          var result = Object.values(byEvent);
+          // Now filter: only keep alerts that are still active
+          var result = Object.values(byEvent).filter(function (e) {
+            return self.isAlertActive(e);
+          });
 
           // Sort by tier: warning > watch > statement
           var tierOrder = { warning: 0, watch: 1, advisory: 1, statement: 2 };
@@ -201,6 +209,10 @@ module.exports = NodeHelper.create({
 
   /**
    * Check whether a parsed CAP alert is still active.
+   * All fields are extracted from the matched <info> block by parseCAP,
+   * so they reflect the status for our specific area — not other areas
+   * in the same CAP file.
+   *
    * Filters out:
    *   - AllClear / Cancel responseTypes (EC sends these when alerts end)
    *   - Alerts with urgency "Past"
@@ -208,12 +220,11 @@ module.exports = NodeHelper.create({
    *   - Alerts whose headline contains "ended"
    *   - Alerts with Alert_Location_Status "ended"
    */
-  isAlertActive: function (parsed, xml) {
+  isAlertActive: function (parsed) {
     // Check responseType — AllClear and Cancel mean the alert is over
-    var responseMatch = xml.match(/<responseType>([^<]+)<\/responseType>/);
-    if (responseMatch) {
-      var responseType = responseMatch[1].trim();
-      if (responseType === "AllClear" || responseType === "Cancel") {
+    if (parsed.responseType) {
+      var rt = parsed.responseType.trim();
+      if (rt === "AllClear" || rt === "Cancel") {
         return false;
       }
     }
@@ -236,9 +247,8 @@ module.exports = NodeHelper.create({
       return false;
     }
 
-    // Check EC-specific Alert_Location_Status parameter
-    var statusMatch = xml.match(/<valueName>layer:EC-MSC-SMC:1\.0:Alert_Location_Status<\/valueName>\s*<value>([^<]+)<\/value>/);
-    if (statusMatch && statusMatch[1].trim().toLowerCase() === "ended") {
+    // Check EC-specific Alert_Location_Status
+    if (parsed.locationStatus && parsed.locationStatus.toLowerCase() === "ended") {
       return false;
     }
 
@@ -286,11 +296,16 @@ module.exports = NodeHelper.create({
     var severity = getTag("severity");
     var certainty = getTag("certainty");
     var urgency = getTag("urgency");
+    var responseType = getTag("responseType");
     var onset = getTag("onset");
     var expires = getTag("expires");
     var senderName = getTag("senderName");
     var sent = xml.match(/<sent>([^<]+)<\/sent>/);
     sent = sent ? sent[1] : "";
+
+    // Extract Alert_Location_Status from this info block
+    var statusMatch = enBlock.match(/<valueName>layer:EC-MSC-SMC:1\.0:Alert_Location_Status<\/valueName>\s*<value>([^<]+)<\/value>/);
+    var locationStatus = statusMatch ? statusMatch[1].trim() : "";
 
     // Determine EC colour from headline
     // EC headlines: "yellow warning", "orange advisory", "red warning", etc.
@@ -327,6 +342,8 @@ module.exports = NodeHelper.create({
       severity: severity,
       certainty: certainty,
       urgency: urgency,
+      responseType: responseType,
+      locationStatus: locationStatus,
       onset: onset,
       expires: expires,
       sent: sent,
