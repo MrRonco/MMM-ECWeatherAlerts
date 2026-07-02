@@ -83,8 +83,15 @@ Module.register("MMM-ECWeatherAlerts", {
     var wrapper = document.createElement("div");
     wrapper.className = "ec-alerts-bar";
 
+    // Prune alerts that expired while updates were failing — stale data
+    // is kept on fetch errors, but never past its own expiry time.
+    var now = new Date();
+    var activeAlerts = (this.alerts || []).filter(function (a) {
+      return !a.expires || new Date(a.expires) > now;
+    });
+
     // No alerts — hide the bar
-    if (!this.alerts || this.alerts.length === 0) {
+    if (activeAlerts.length === 0) {
       wrapper.style.display = "none";
       return wrapper;
     }
@@ -95,11 +102,11 @@ Module.register("MMM-ECWeatherAlerts", {
     wrapper.style.setProperty("--ec-time-dimming", Math.round(this.config.textDimming * 0.75 * 100) / 100);
 
     // Apply colour class from the highest-tier alert
-    var topAlert = this.alerts[0];
+    var topAlert = activeAlerts[0];
     wrapper.classList.add("ec-color-" + topAlert.color);
 
     // Limit to maxAlerts
-    var alerts = this.alerts.slice(0, this.config.maxAlerts);
+    var alerts = activeAlerts.slice(0, this.config.maxAlerts);
 
     // Build single-row layout
     var row = document.createElement("div");
@@ -199,11 +206,10 @@ Module.register("MMM-ECWeatherAlerts", {
     } else if (notification === "EC_ALERTS_ERROR") {
       Log.error("[MMM-ECWeatherAlerts] Error: " + payload);
       this.loaded = true;
-
-      if (this.alertsActive) {
-        this.alertsActive = false;
-        this.hide(300);
-      }
+      // Keep showing the current alerts — hiding an active warning
+      // because a fetch failed is the wrong failure mode. Expired
+      // alerts are pruned in getDom.
+      this.updateDom(this.config.animationSpeed);
       this.updateAlertHeight();
     }
   },

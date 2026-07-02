@@ -27,6 +27,8 @@ module.exports = NodeHelper.create({
 
   start: function () {
     console.log("[MMM-ECWeatherAlerts] Node helper started");
+    this.fetching = false;
+    this.fetchWatchdog = null;
   },
 
   socketNotificationReceived: function (notification, payload) {
@@ -50,6 +52,15 @@ module.exports = NodeHelper.create({
       return;
     }
 
+    // One fetch cycle at a time — during outages a hung cycle must not
+    // stack new request batches every updateInterval.
+    if (self.fetching) return;
+    self.fetching = true;
+
+    // Safety net: if a cycle somehow never completes, re-arm after 2 min
+    clearTimeout(self.fetchWatchdog);
+    self.fetchWatchdog = setTimeout(function () { self.fetching = false; }, 120000);
+
     var now = new Date();
     var today = now.toISOString().slice(0, 10).replace(/-/g, "");
     var yesterday = new Date(now - 86400000).toISOString().slice(0, 10).replace(/-/g, "");
@@ -62,6 +73,8 @@ module.exports = NodeHelper.create({
     ];
 
     self.tryNextUrl(urls, 0, area, config.alertTypes, function (err, alerts) {
+      self.fetching = false;
+      clearTimeout(self.fetchWatchdog);
       if (err || !alerts) {
         console.error("[MMM-ECWeatherAlerts] All sources failed:", err);
         self.sendSocketNotification("EC_ALERTS_ERROR", err || "No data");
@@ -123,6 +136,7 @@ module.exports = NodeHelper.create({
 
     var dirsChecked = 0;
     var allCapFiles = [];
+    var fetchErrors = 0;
 
     recentHours.forEach(function (hour) {
       self.httpGet(baseUrl + hour + "/", function (err, hourHtml) {
@@ -133,9 +147,11 @@ module.exports = NodeHelper.create({
           while ((fileMatch = regex.exec(hourHtml)) !== null) {
             allCapFiles.push(baseUrl + hour + "/" + fileMatch[1]);
           }
+        } else {
+          fetchErrors++;
         }
         if (dirsChecked === recentHours.length) {
-          self.fetchAndFilterCAPs(allCapFiles, area, callback);
+          self.fetchAndFilterCAPs(allCapFiles, area, callback, fetchErrors);
         }
       });
     });
@@ -146,11 +162,19 @@ module.exports = NodeHelper.create({
    * Deduplicates by event type, keeping the most recent.
    * Filters out expired and ended alerts.
    */
-  fetchAndFilterCAPs: function (capUrls, area, callback) {
+  fetchAndFilterCAPs: function (capUrls, area, callback, priorErrors) {
     var self = this;
+    var fetchErrors = priorErrors || 0;
 
     if (capUrls.length === 0) {
-      callback(null, []);
+      if (fetchErrors > 0) {
+        // A partial scan that found nothing is NOT "no alerts" — the
+        // failed requests may have held the active warnings. Report an
+        // error so the frontend keeps its previous state.
+        callback("Partial scan: " + fetchErrors + " request(s) failed, no alert data", null);
+      } else {
+        callback(null, []);
+      }
       return;
     }
 
@@ -169,7 +193,9 @@ module.exports = NodeHelper.create({
     uniqueUrls.forEach(function (url) {
       self.httpGet(url, function (err, xml) {
         fetched++;
-        if (!err && xml && xml.toLowerCase().includes(area.toLowerCase())) {
+        if (err) {
+          fetchErrors++;
+        } else if (xml && xml.toLowerCase().includes(area.toLowerCase())) {
           var parsed = self.parseCAP(xml, area);
           if (parsed) {
             entries.push(parsed);
@@ -201,6 +227,14 @@ module.exports = NodeHelper.create({
             return (tierOrder[a.tier] || 2) - (tierOrder[b.tier] || 2);
           });
 
+          if (result.length === 0 && fetchErrors > 0) {
+            // Same partial-scan rule as above: empty + errors ≠ all clear.
+            callback("Partial scan: " + fetchErrors + " request(s) failed, no alert data", null);
+            return;
+          }
+          if (fetchErrors > 0) {
+            console.warn("[MMM-ECWeatherAlerts] Partial scan: " + fetchErrors + " request(s) failed; showing " + result.length + " alert(s) found");
+          }
           callback(null, result);
         }
       });
@@ -352,29 +386,50 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * HTTPS GET with redirect support.
+   * HTTPS GET with redirect support and a hard 15s timeout.
+   * A hung EC connection must fail fast so the completion counters
+   * upstream always resolve — otherwise the alert bar silently
+   * freezes with stale data. Callback fires exactly once.
    */
-  httpGet: function (url, callback) {
-    https.get(url, function (response) {
-      if (response.statusCode === 301 || response.statusCode === 302) {
-        https.get(response.headers.location, function (res2) {
-          var data = "";
-          res2.on("data", function (chunk) { data += chunk; });
-          res2.on("end", function () { callback(null, data); });
-        }).on("error", function (e) { callback(e, null); });
+  httpGet: function (url, callback, redirected) {
+    var self = this;
+    var done = false;
+    var killTimer = null;
+    var finish = function (err, data) {
+      if (done) return;
+      done = true;
+      clearTimeout(killTimer);
+      callback(err, data);
+    };
+
+    var req = https.get(url, function (response) {
+      if (
+        (response.statusCode === 301 || response.statusCode === 302) &&
+        response.headers.location &&
+        !redirected
+      ) {
+        response.resume(); // discard body, follow redirect (once)
+        self.httpGet(response.headers.location, finish, true);
         return;
       }
       var data = "";
       response.on("data", function (chunk) { data += chunk; });
       response.on("end", function () {
         if (response.statusCode === 200) {
-          callback(null, data);
+          finish(null, data);
         } else {
-          callback("HTTP " + response.statusCode, null);
+          finish("HTTP " + response.statusCode, null);
         }
       });
-    }).on("error", function (error) {
-      callback(error, null);
+    });
+
+    // Wall-clock timer, NOT req.setTimeout(): node's idle-timeout fires
+    // prematurely when the socket stalls in a slow DNS lookup phase.
+    killTimer = setTimeout(function () {
+      req.destroy(new Error("Request timeout"));
+    }, 30000);
+    req.on("error", function (error) {
+      finish(error, null);
     });
   }
 });
